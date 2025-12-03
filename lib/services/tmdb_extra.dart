@@ -6,7 +6,7 @@ import 'package:cinematch/models/review.dart';
 
 class TMDBExtra {
   // Puedes inyectar la API key en tiempo de ejecución con setApiKey
-  static String? _overrideApiKey;
+  static String? _overrideApiKey = '05a10bf0f881a848a9f1c31dd5355b02';
 
   // Puedes cambiar la imageBase si tu TMDBService la maneja distinto
   static String _imageBase = 'https://image.tmdb.org/t/p/w500';
