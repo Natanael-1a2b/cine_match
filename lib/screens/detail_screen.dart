@@ -8,7 +8,12 @@ import 'package:cinematch/services/db_service.dart';
 import 'video_player_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:share_plus/share_plus.dart';
+
+// Nuevos imports
+import 'package:cinematch/services/tmdb_extra.dart';
+import 'package:cinematch/models/credit.dart';
+import 'package:cinematch/models/review.dart';
+import 'package:cinematch/widgets/cast_card.dart';
 
 class DetailScreen extends StatefulWidget {
   final int movieId;
@@ -25,6 +30,12 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
   Map<int, String> genreMap = {};
   String? error;
 
+  // nuevos
+  CreditResponse? credits;
+  List<Review> reviews = [];
+  bool creditsLoading = true;
+  bool reviewsLoading = true;
+
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
 
@@ -34,6 +45,8 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
     _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeIn);
     _load();
+    _loadCredits();
+    _loadReviews();
   }
 
   Future<void> _load() async {
@@ -54,6 +67,28 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
         loading = false;
       });
       _animController.forward();
+    }
+  }
+
+  Future<void> _loadCredits() async {
+    setState(() => creditsLoading = true);
+    try {
+      credits = await TMDBExtra.getCredits(widget.movieId);
+    } catch (e) {
+      debugPrint('Credits error: $e');
+    } finally {
+      setState(() => creditsLoading = false);
+    }
+  }
+
+  Future<void> _loadReviews() async {
+    setState(() => reviewsLoading = true);
+    try {
+      reviews = await TMDBExtra.getReviews(widget.movieId);
+    } catch (e) {
+      debugPrint('Reviews error: $e');
+    } finally {
+      setState(() => reviewsLoading = false);
     }
   }
 
@@ -101,46 +136,6 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
     }
   }
 
-  // Nuevo: compartir la película
-  Future<void> _shareMovie() async {
-    if (movie == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Información no disponible para compartir')));
-      return;
-    }
-
-    // Intentamos obtener la videoKey para incluir enlace al trailer si existe
-    String? trailerKey;
-    try {
-      trailerKey = await TMDBService.getTrailerKey(widget.movieId);
-    } catch (_) {
-      trailerKey = null;
-    }
-
-    final title = movie!.title;
-    final overview = (movie!.overview != null && movie!.overview!.isNotEmpty) ? movie!.overview! : '';
-    final tmdbUrl = 'https://www.themoviedb.org/movie/${movie!.id}';
-    final trailerUrl = (trailerKey != null && trailerKey.isNotEmpty) ? 'https://www.youtube.com/watch?v=$trailerKey' : null;
-
-    final buffer = StringBuffer();
-    buffer.writeln(title);
-    if (overview.isNotEmpty) {
-      // incluir un resumen corto
-      final short = overview.length > 240 ? overview.substring(0, 240).trim() + '...' : overview;
-      buffer.writeln('\n$short\n');
-    }
-    if (trailerUrl != null) {
-      buffer.writeln('Ver trailer: $trailerUrl');
-    }
-    buffer.writeln('Más info: $tmdbUrl');
-
-    try {
-      await Share.share(buffer.toString(), subject: title);
-    } catch (e) {
-      debugPrint('Error sharing: $e');
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo compartir la película')));
-    }
-  }
-
   Widget _shimmerPoster({double? h}) {
     return Shimmer.fromColors(
       baseColor: Colors.white10,
@@ -152,17 +147,100 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
     );
   }
 
+  Widget _buildCastSection() {
+    if (creditsLoading) {
+      return SizedBox(
+        height: 180,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: 6,
+          itemBuilder: (_, i) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: SizedBox(width: 100, child: _shimmerPoster(h: 140)),
+          ),
+        ),
+      );
+    }
+
+    final castList = credits?.cast ?? [];
+    if (castList.isEmpty) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 190,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: castList.length.clamp(0, 20),
+        itemBuilder: (context, index) {
+          final c = castList[index];
+          return Padding(padding: const EdgeInsets.symmetric(horizontal: 8.0), child: CastCard(cast: c));
+        },
+      ),
+    );
+  }
+
+  Widget _buildReviewsSection() {
+    if (reviewsLoading) {
+      return Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(children: List.generate(2, (_) => _shimmerPoster(h: 80))),
+      );
+    }
+
+    if (reviews.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Text('No hay reseñas disponibles', style: TextStyle(color: Colors.white70)),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        children: reviews.map((r) {
+          final short = r.content.length > 280 ? r.content.substring(0, 280).trim() + '...' : r.content;
+          return Card(
+            color: Colors.black54,
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(r.author, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Text(short, style: const TextStyle(color: Colors.white70)),
+                if (r.content.length > 280)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      child: const Text('Leer más'),
+                      onPressed: () {
+                        // muestra modal con texto completo
+                        showDialog(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: Text('Reseña de ${r.author}'),
+                            content: SingleChildScrollView(child: Text(r.content)),
+                            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar'))],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ]),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(movie?.title ?? 'Detalle'),
         actions: [
-          IconButton(
-            tooltip: 'Compartir',
-            icon: const Icon(Icons.share),
-            onPressed: _shareMovie,
-          ),
           IconButton(
             icon: Icon(isFav ? Icons.favorite : Icons.favorite_border),
             onPressed: movie == null ? null : _toggleFav,
@@ -172,13 +250,7 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
       body: loading
           ? Center(child: _shimmerPoster())
           : error != null
-          ? Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Error: $error'),
-          const SizedBox(height: 8),
-          ElevatedButton(onPressed: _load, child: const Text('Reintentar'))
-        ]),
-      )
+          ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text('Error: $error'), const SizedBox(height: 8), ElevatedButton(onPressed: _load, child: const Text('Reintentar'))]))
           : SingleChildScrollView(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -240,17 +312,31 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
                         label: const Text('Abrir en YouTube'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800]),
                       ),
-                      const SizedBox(width: 12),
-                      ElevatedButton.icon(
-                        onPressed: _shareMovie,
-                        icon: const Icon(Icons.share),
-                        label: const Text('Compartir'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
-                      ),
                     ],
                   ),
                 ]),
-              )
+              ),
+
+              // Sección: Reparto
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text('Reparto', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  TextButton(onPressed: () {/* opcional: ver todo */}, child: const Text('Ver todo'))
+                ]),
+              ),
+              _buildCastSection(),
+
+              const SizedBox(height: 12),
+
+              // Sección: Reviews
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: const Text('Reseñas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+              _buildReviewsSection(),
+
+              const SizedBox(height: 20),
             ],
           ),
         ),
