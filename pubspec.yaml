@@ -17,9 +17,10 @@ dependencies:
   flutter_staggered_animations: ^1.1.0
   shared_preferences: ^2.1.1
   webview_flutter: ^4.0.7
-
-  # Shimmer placeholder
   shimmer: ^2.0.0
+
+  # Share package actualizado (versión que incluye namespace en Android)
+  share_plus: ^12.0.1
 
 dev_dependencies:
   flutter_test:

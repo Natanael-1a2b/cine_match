@@ -8,6 +8,7 @@ import 'package:cinematch/services/db_service.dart';
 import 'video_player_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:share_plus/share_plus.dart';
 
 class DetailScreen extends StatefulWidget {
   final int movieId;
@@ -47,12 +48,11 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
       isFav = await DBService.instance.isFavorite(widget.movieId);
     } catch (e) {
       error = e.toString();
-      print('Detail load error: $e');
+      debugPrint('Detail load error: $e');
     } finally {
       setState(() {
         loading = false;
       });
-      // start fade animation for content
       _animController.forward();
     }
   }
@@ -101,6 +101,46 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
     }
   }
 
+  // Nuevo: compartir la película
+  Future<void> _shareMovie() async {
+    if (movie == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Información no disponible para compartir')));
+      return;
+    }
+
+    // Intentamos obtener la videoKey para incluir enlace al trailer si existe
+    String? trailerKey;
+    try {
+      trailerKey = await TMDBService.getTrailerKey(widget.movieId);
+    } catch (_) {
+      trailerKey = null;
+    }
+
+    final title = movie!.title;
+    final overview = (movie!.overview != null && movie!.overview!.isNotEmpty) ? movie!.overview! : '';
+    final tmdbUrl = 'https://www.themoviedb.org/movie/${movie!.id}';
+    final trailerUrl = (trailerKey != null && trailerKey.isNotEmpty) ? 'https://www.youtube.com/watch?v=$trailerKey' : null;
+
+    final buffer = StringBuffer();
+    buffer.writeln(title);
+    if (overview.isNotEmpty) {
+      // incluir un resumen corto
+      final short = overview.length > 240 ? overview.substring(0, 240).trim() + '...' : overview;
+      buffer.writeln('\n$short\n');
+    }
+    if (trailerUrl != null) {
+      buffer.writeln('Ver trailer: $trailerUrl');
+    }
+    buffer.writeln('Más info: $tmdbUrl');
+
+    try {
+      await Share.share(buffer.toString(), subject: title);
+    } catch (e) {
+      debugPrint('Error sharing: $e');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo compartir la película')));
+    }
+  }
+
   Widget _shimmerPoster({double? h}) {
     return Shimmer.fromColors(
       baseColor: Colors.white10,
@@ -118,6 +158,11 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
       appBar: AppBar(
         title: Text(movie?.title ?? 'Detalle'),
         actions: [
+          IconButton(
+            tooltip: 'Compartir',
+            icon: const Icon(Icons.share),
+            onPressed: _shareMovie,
+          ),
           IconButton(
             icon: Icon(isFav ? Icons.favorite : Icons.favorite_border),
             onPressed: movie == null ? null : _toggleFav,
@@ -194,6 +239,13 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
                         icon: const Icon(Icons.open_in_new),
                         label: const Text('Abrir en YouTube'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800]),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: _shareMovie,
+                        icon: const Icon(Icons.share),
+                        label: const Text('Compartir'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
                       ),
                     ],
                   ),
