@@ -166,8 +166,9 @@ class _DetailState extends State<DetailScreen> with SingleTickerProviderStateMix
     final castList = credits?.cast ?? [];
     if (castList.isEmpty) return const SizedBox.shrink();
 
+    // Aumentamos ligeramente la altura disponible para evitar overflow cuando el nombre ocupa 2 líneas
     return SizedBox(
-      height: 190,
+      height: 200, // anteriormente 190
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),

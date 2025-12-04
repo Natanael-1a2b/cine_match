@@ -142,63 +142,111 @@ class _SearchState extends State<SearchScreen> {
       ...genresMap.entries.map((e) => DropdownMenuItem<int?>(child: Text(e.value), value: e.key)).toList(),
     ];
 
+    // Limitamos la altura total del panel de filtros y hacemos su contenido scrollable internamente
     return ExpansionTile(
       title: Text('Filtros'),
+      childrenPadding: EdgeInsets.zero,
+      // Al desplegar, el contenido estará dentro de un SingleChildScrollView con maxHeight
       children: [
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Column(children: [
-            Row(children: [
-              Expanded(
-                child: DropdownButtonFormField<int?>(
-                  value: selectedGenre,
-                  decoration: InputDecoration(labelText: 'Género'),
-                  items: genreDropdownItems,
-                  onChanged: (v) {
-                    setState(() => selectedGenre = v);
-                    _search();
-                  },
-                ),
+        LayoutBuilder(builder: (context, constraints) {
+          final screenH = MediaQuery.of(context).size.height;
+          // Permitir hasta 42% de la altura de pantalla, ajusta si necesitas más/menos
+          final maxPanelHeight = screenH * 0.42;
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxPanelHeight),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Primera fila: género + año
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<int?>(
+                          isExpanded: true,
+                          value: selectedGenre,
+                          decoration: const InputDecoration(
+                            labelText: 'Género',
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
+                          items: genreDropdownItems,
+                          onChanged: (v) {
+                            setState(() => selectedGenre = v);
+                            _search();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 120,
+                        child: DropdownButtonFormField<String?>(
+                          isExpanded: true,
+                          value: year,
+                          decoration: const InputDecoration(
+                            labelText: 'Año',
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
+                          items: yearDropdownItems,
+                          onChanged: (v) {
+                            setState(() => year = v);
+                            _search();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Segunda fila: rating + solo favoritas (se eliminó el botón "Aplicar")
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Text('Min rating'),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 60,
+                        child: DropdownButton<double>(
+                          isExpanded: true,
+                          value: minRating,
+                          items: [0, 5, 6, 7, 8].map((v) => DropdownMenuItem<double>(child: Text('$v'), value: v.toDouble())).toList(),
+                          onChanged: (d) {
+                            setState(() => minRating = d ?? 0);
+                            _search();
+                          },
+                        ),
+                      ),
+                      const Spacer(),
+                      // Checkbox y etiqueta agrupados para no empujar el layout
+                      GestureDetector(
+                        onTap: () {
+                          setState(() => onlyFavorites = !onlyFavorites);
+                          _search();
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(value: onlyFavorites, onChanged: (v) {
+                              setState(() => onlyFavorites = v ?? false);
+                              _search();
+                            }),
+                            const SizedBox(width: 8),
+                            const Text('Solo favoritas'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Si el contenido anterior se hace muy alto, se podrá scrollear internamente
+                ],
               ),
-              SizedBox(width: 12),
-              Container(
-                width: 120,
-                child: DropdownButtonFormField<String?>(
-                  value: year,
-                  decoration: InputDecoration(labelText: 'Año'),
-                  items: yearDropdownItems,
-                  onChanged: (v) {
-                    setState(() => year = v);
-                    _search();
-                  },
-                ),
-              )
-            ]),
-            SizedBox(height: 12),
-            Row(children: [
-              Text('Min rating'),
-              SizedBox(width: 8),
-              DropdownButton<double>(
-                value: minRating,
-                items: [0, 5, 6, 7, 8].map((v) => DropdownMenuItem<double>(child: Text('$v'), value: v.toDouble())).toList(),
-                onChanged: (d) {
-                  setState(() => minRating = d ?? 0);
-                  _search();
-                },
-              ),
-              Spacer(),
-              Checkbox(value: onlyFavorites, onChanged: (v) {
-                setState(() => onlyFavorites = v ?? false);
-                _search();
-              }),
-              SizedBox(width: 8),
-              Text('Solo favoritas'),
-              SizedBox(width: 12),
-              ElevatedButton(onPressed: _search, child: Text('Aplicar')),
-            ])
-          ]),
-        ),
-        SizedBox(height: 8),
+            ),
+          );
+        }),
       ],
     );
   }
@@ -207,27 +255,33 @@ class _SearchState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final favProv = Provider.of<FavoritesProvider>(context);
     return Scaffold(
-        appBar: AppBar(title: TextField(controller: _controller, decoration: InputDecoration(hintText: 'Buscar películas...'))),
-        body: Column(
-          children: [
-            _filters(),
-            if (loading) LinearProgressIndicator(),
-            Expanded(
-              child: results.isEmpty
-                  ? Center(child: Text(onlyFavorites ? 'No hay favoritos que cumplan los filtros' : 'No hay resultados'))
-                  : GridView.builder(
-                padding: EdgeInsets.all(8),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 0.55,
+        appBar: AppBar(
+          title: TextField(controller: _controller, decoration: const InputDecoration(hintText: 'Buscar películas...')),
+        ),
+        // Mantener el comportamiento por defecto frente al teclado
+        resizeToAvoidBottomInset: true,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _filters(),
+              if (loading) const LinearProgressIndicator(minHeight: 4),
+              Expanded(
+                child: results.isEmpty
+                    ? Center(child: Text(onlyFavorites ? 'No hay favoritos que cumplan los filtros' : 'No hay resultados'))
+                    : GridView.builder(
+                  padding: const EdgeInsets.all(8),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 0.55,
+                  ),
+                  itemCount: results.length,
+                  itemBuilder: (_, i) => MovieCard(movie: results[i]),
                 ),
-                itemCount: results.length,
-                itemBuilder: (_, i) => MovieCard(movie: results[i]),
-              ),
-            )
-          ],
+              )
+            ],
+          ),
         ));
   }
 }

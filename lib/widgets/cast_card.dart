@@ -30,6 +30,9 @@ class CastCard extends StatelessWidget {
       child: SizedBox(
         width: width,
         child: Column(
+          // Evita que la columna ocupe todo el eje vertical y centra su contenido
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Hero(
               tag: 'person-${cast.id}',
@@ -48,8 +51,22 @@ class CastCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(cast.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12)),
-            if (cast.character != null) Text(cast.character!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            // Limitar líneas y centrar para evitar crecimiento vertical inesperado
+            Text(
+              cast.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+            if (cast.character != null)
+              Text(
+                cast.character!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
+              ),
           ],
         ),
       ),
